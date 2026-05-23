@@ -8,6 +8,6 @@ Set `OSCI_AUDIO_DEVICES_ENABLE_SYSTEM_AUDIO=1` to compile the platform-native sy
 
 The custom device selector is derived from JUCE's device selector implementation. Proprietary consumers must use this module only with suitable JUCE commercial or other non-GPL-compatible licensing for the consuming product.
 
-Windows system-audio capture uses miniaudio when enabled. Keep the miniaudio notice with products that redistribute that dependency.
+Windows system-audio capture uses miniaudio when enabled. Initialise the nested `third_party/miniaudio` submodule or provide `miniaudio/miniaudio.h` on the include path. Keep the miniaudio notice with products that redistribute that dependency.
 
 This is an engineering policy document, not legal advice.

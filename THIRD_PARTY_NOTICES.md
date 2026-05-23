@@ -6,4 +6,6 @@
 
 ## miniaudio
 
-The Windows loopback device implementation uses miniaudio when `OSCI_AUDIO_DEVICES_ENABLE_SYSTEM_AUDIO=1` on Windows. Keep the miniaudio license notice with products that redistribute that dependency.
+The Windows loopback device implementation uses miniaudio when `OSCI_AUDIO_DEVICES_ENABLE_SYSTEM_AUDIO=1` on Windows. The module includes miniaudio as `third_party/miniaudio`.
+
+miniaudio is available under the Unlicense or MIT No Attribution. Keep `third_party/miniaudio/LICENSE` with source distributions, and include the required miniaudio notice with binary distributions if you choose the MIT No Attribution path.

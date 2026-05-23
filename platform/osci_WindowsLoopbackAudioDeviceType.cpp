@@ -14,8 +14,10 @@
 #define MINIAUDIO_IMPLEMENTATION
 #if __has_include(<miniaudio/miniaudio.h>)
  #include <miniaudio/miniaudio.h>
+#elif __has_include("../third_party/miniaudio/miniaudio.h")
+ #include "../third_party/miniaudio/miniaudio.h"
 #else
- #include "../../miniaudio/miniaudio.h"
+ #error "OSCI_AUDIO_DEVICES_ENABLE_SYSTEM_AUDIO=1 on Windows requires miniaudio. Initialise the osci_audio_devices third_party/miniaudio submodule or provide <miniaudio/miniaudio.h>."
 #endif
 
 #include <atomic>
