@@ -30,6 +30,10 @@
 
 using namespace juce;
 
+// Output-attached process-tap aggregates can return silent buffers at 32 frames,
+// even with a minimal native IOProc. Keep capture and output at a stable size.
+static constexpr int minimumProcessTapBufferSize = 64;
+
 //==============================================================================
 // MARK: - CoreAudio Property Helpers
 //==============================================================================
@@ -545,16 +549,6 @@ struct ProcessTapBackend
         inputChannelPointers[0] = nullptr;
         outputChannelPointers[0] = nullptr;
 
-        if (ioQueue == nullptr)
-        {
-            ioQueue = dispatch_queue_create ("osci-render.process-tap-io", DISPATCH_QUEUE_SERIAL);
-
-            // Best-effort: bump scheduling priority without calling QoS floor APIs
-            // (some libdispatch builds assert in dispatch_set_qos_class_* here).
-            dispatch_set_target_queue (ioQueue, dispatch_get_global_queue (QOS_CLASS_USER_INTERACTIVE, 0));
-        }
-
-
         // Create IO proc with block callback
         AudioDeviceIOBlock ioBlock = ^(const AudioTimeStamp* inNow,
                                        const AudioBufferList* inInputData,
@@ -562,10 +556,10 @@ struct ProcessTapBackend
                                        AudioBufferList* outOutputData,
                                        const AudioTimeStamp* inOutputTime)
         {
-            this->audioIOCallback (inInputData, outOutputData);
+            this->audioIOCallback(inInputData, outOutputData);
         };
 
-        OSStatus err = AudioDeviceCreateIOProcIDWithBlock (&ioProcID, aggregateDeviceID, ioQueue, ioBlock);
+        OSStatus err = AudioDeviceCreateIOProcIDWithBlock(&ioProcID, aggregateDeviceID, nullptr, ioBlock);
         if (err != noErr)
         {
             lastError = "Failed to create IO proc (error " + String ((int) err) + ").";
@@ -830,14 +824,15 @@ struct ProcessTapBackend
         if (caReadProperty (devID, kAudioDevicePropertyBufferFrameSizeRange,
                             kAudioObjectPropertyScopeGlobal, range))
         {
-            int lo = jmax (32, (int) range.mMinimum);
+            int lo = jmax(minimumProcessTapBufferSize, (int) range.mMinimum);
             int hi = jmin (16384, (int) range.mMaximum);
 
             for (int sz = lo; sz <= hi; sz *= 2)
                 sizes.add (sz);
 
-            if (sizes.isEmpty() || sizes.getLast() < hi)
-                sizes.add (hi);
+            if (hi >= lo && (sizes.isEmpty() || sizes.getLast() < hi)) {
+                sizes.add(hi);
+            }
         }
 
         if (sizes.isEmpty())
@@ -869,8 +864,6 @@ struct ProcessTapBackend
     AudioObjectID aggregateDeviceID = kAudioObjectUnknown;
     AudioDeviceIOProcID ioProcID = nullptr;
     AudioStreamBasicDescription tapFormat {};
-
-    dispatch_queue_t ioQueue = nullptr;
 
     std::atomic<AudioIODeviceCallback*> callback { nullptr };
     std::atomic<bool> playing { false };
@@ -989,8 +982,10 @@ String ProcessAudioDevice::open (const BigInteger& inputChannels,
     }
 
     int desiredBufferSize = bufferSizeSamples;
-    if (desiredBufferSize <= 0)
+    if (desiredBufferSize <= 0) {
         desiredBufferSize = backend->getDefaultBufferSize();
+    }
+    desiredBufferSize = jmax(minimumProcessTapBufferSize, desiredBufferSize);
 
     // Set buffer size on the real output device BEFORE creating the aggregate
     // so the sub-device starts at the right block size.
