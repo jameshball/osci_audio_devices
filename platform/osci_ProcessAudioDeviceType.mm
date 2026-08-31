@@ -27,7 +27,6 @@
 #import <dispatch/dispatch.h>
 
 #include "osci_ProcessAudioPermissions.h"
-#include "osci_ProcessTapDiagnostics.h"
 
 using namespace juce;
 
@@ -550,14 +549,6 @@ struct ProcessTapBackend
         inputChannelPointers[0] = nullptr;
         outputChannelPointers[0] = nullptr;
 
-        const bool diagnosticsEnabled = juce::SystemStats::getEnvironmentVariable("OSCI_PROCESS_TAP_DIAGNOSTICS", {}) == "1";
-        const bool captureOnly = diagnosticsEnabled
-            && juce::SystemStats::getEnvironmentVariable("OSCI_PROCESS_TAP_CAPTURE_ONLY", {}) == "1";
-        if (diagnosticsEnabled) {
-            juce::Logger::writeToLog("ProcessTap diagnostics captureOnly=" + juce::String(captureOnly ? 1 : 0));
-            diagnostics = std::make_unique<ProcessTapDiagnostics>(currentSampleRate, currentBufferSize, outputDevice, aggregateDeviceID);
-        }
-
         // Create IO proc with block callback
         AudioDeviceIOBlock ioBlock = ^(const AudioTimeStamp* inNow,
                                        const AudioBufferList* inInputData,
@@ -565,24 +556,7 @@ struct ProcessTapBackend
                                        AudioBufferList* outOutputData,
                                        const AudioTimeStamp* inOutputTime)
         {
-            if (diagnostics != nullptr) {
-                const auto record = diagnostics->begin(inInputData, outOutputData, inInputTime);
-                if (captureOnly) {
-                    if (outOutputData != nullptr) {
-                        for (UInt32 i = 0; i < outOutputData->mNumberBuffers; ++i) {
-                            const auto& buffer = outOutputData->mBuffers[i];
-                            if (buffer.mData != nullptr) {
-                                zeromem(buffer.mData, buffer.mDataByteSize);
-                            }
-                        }
-                    }
-                } else {
-                    this->audioIOCallback(inInputData, outOutputData);
-                }
-                diagnostics->end(record);
-            } else {
-                this->audioIOCallback(inInputData, outOutputData);
-            }
+            this->audioIOCallback(inInputData, outOutputData);
         };
 
         OSStatus err = AudioDeviceCreateIOProcIDWithBlock(&ioProcID, aggregateDeviceID, nullptr, ioBlock);
@@ -640,8 +614,6 @@ struct ProcessTapBackend
             AudioDeviceDestroyIOProcID (aggregateDeviceID, ioProcID);
             ioProcID = nullptr;
         }
-
-        diagnostics.reset();
 
         if (auto* cb = callback.exchange (nullptr))
             cb->audioDeviceStopped();
@@ -893,8 +865,6 @@ struct ProcessTapBackend
     AudioDeviceIOProcID ioProcID = nullptr;
     AudioStreamBasicDescription tapFormat {};
 
-    std::unique_ptr<ProcessTapDiagnostics> diagnostics;
-
     std::atomic<AudioIODeviceCallback*> callback { nullptr };
     std::atomic<bool> playing { false };
     bool isDeviceOpen = false;
@@ -1017,15 +987,11 @@ String ProcessAudioDevice::open (const BigInteger& inputChannels,
     }
     desiredBufferSize = jmax(minimumProcessTapBufferSize, desiredBufferSize);
 
-    const bool diagnosticsEnabled = juce::SystemStats::getEnvironmentVariable("OSCI_PROCESS_TAP_DIAGNOSTICS", {}) == "1";
-    const int physicalBufferOverride = diagnosticsEnabled
-        ? juce::SystemStats::getEnvironmentVariable("OSCI_PROCESS_TAP_PHYSICAL_FRAMES", {}).getIntValue() : 0;
-
     // Set buffer size on the real output device BEFORE creating the aggregate
     // so the sub-device starts at the right block size.
     if (desiredBufferSize > 0)
     {
-        UInt32 bs = (UInt32) (physicalBufferOverride > 0 ? physicalBufferOverride : desiredBufferSize);
+        UInt32 bs = (UInt32) desiredBufferSize;
         AudioObjectPropertyAddress addr {
             kAudioDevicePropertyBufferFrameSize,
             kAudioObjectPropertyScopeGlobal,
@@ -1090,16 +1056,6 @@ String ProcessAudioDevice::open (const BigInteger& inputChannels,
             kElementMain
         };
         AudioObjectSetPropertyData (backend->aggregateDeviceID, &addr, 0, nullptr, sizeof (UInt32), &bs);
-    }
-
-    // Diagnostic experiment: aggregate configuration may also change its physical
-    // device. Reapply the override, then observe both actual sizes (also in the timer).
-    if (physicalBufferOverride > 0) {
-        UInt32 bs = (UInt32) physicalBufferOverride;
-        AudioObjectPropertyAddress address { kAudioDevicePropertyBufferFrameSize, kAudioObjectPropertyScopeGlobal, kElementMain };
-        const auto status = AudioObjectSetPropertyData(backend->outputDevice, &address, 0, nullptr, sizeof(bs), &bs);
-        juce::Logger::writeToLog("ProcessTap diagnostics bufferRequest aggregate=" + juce::String(desiredBufferSize)
-            + " physical=" + juce::String(physicalBufferOverride) + " status=" + juce::String((int) status));
     }
 
     // Read back the actual values
