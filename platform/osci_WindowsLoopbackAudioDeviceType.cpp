@@ -345,7 +345,7 @@ juce::String WindowsLoopbackAudioDevice::open (const juce::BigInteger& inputChan
         }
     }
 
-    juce::Logger::writeToLog ("WinLoopbackDevice::open: success — sampleRate=" + juce::String (backend->currentSampleRate)
+    juce::Logger::writeToLog ("WinLoopbackDevice::open: success - sampleRate=" + juce::String (backend->currentSampleRate)
                               + " bufferSize=" + juce::String (backend->currentBufferSize)
                               + " inChans=" + juce::String (backend->activeInputChannels));
     return {};
