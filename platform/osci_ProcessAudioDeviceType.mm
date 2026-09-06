@@ -1079,7 +1079,7 @@ String ProcessAudioDevice::open (const BigInteger& inputChannels,
         backend->currentSampleRate = 44100.0;
 
     backend->isDeviceOpen = true;
-    juce::Logger::writeToLog ("ProcessAudioDevice::open: success — sampleRate=" + String (backend->currentSampleRate)
+    juce::Logger::writeToLog ("ProcessAudioDevice::open: success - sampleRate=" + String (backend->currentSampleRate)
                               + " bufferSize=" + String (backend->currentBufferSize)
                               + " inChans=" + String (backend->activeInputChannels)
                               + " outChans=" + String (backend->activeOutputChannels));
